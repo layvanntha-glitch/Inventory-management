@@ -19,7 +19,8 @@ export default function Login({ setUser }) {
     try {
       const response = await authService.login(email, password)
       localStorage.setItem('auth_token', response.data.token)
-      setUser({ token: response.data.token })
+      localStorage.setItem('auth_user', JSON.stringify(response.data.user))
+      setUser({ token: response.data.token, ...response.data.user })
       toast.success(t.login_success)
       navigate('/')
     } catch (error) {

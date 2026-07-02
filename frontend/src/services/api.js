@@ -22,6 +22,16 @@ api.interceptors.request.use((config) => {
 export const authService = {
   login: (email, password) => api.post('/login', { email, password }),
   logout: () => api.post('/logout'),
+  me: () => api.get('/me'),
+  updateProfile: (data) => api.put('/profile', data),
+}
+
+export const userService = {
+  getAll: (params) => api.get('/users', { params }),
+  getById: (id) => api.get(`/users/${id}`),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
 }
 
 export const contactService = {
@@ -34,6 +44,7 @@ export const contactService = {
 
 export const itemService = {
   getAll: () => api.get('/items'),
+  getAllProducts: () => api.get('/items?all=1'),
   getById: (id) => api.get(`/items/${id}`),
   create: (data) => api.post('/items', data),
   update: (id, data) => api.put(`/items/${id}`, data),
@@ -49,8 +60,26 @@ export const purchaseService = {
   delete: (id) => api.delete(`/purchases/${id}`),
 }
 
+export const refundService = {
+  getAll: () => api.get('/refunds'),
+  create: (data) => api.post('/refunds', data),
+}
+
+export const paywayService = {
+  checkout: (data) => api.post('/pos/payway/checkout', data),
+  status: (tranId) => api.get(`/pos/payway/status/${tranId}`),
+}
+
+export const shiftService = {
+  current: () => api.get('/shifts/current'),
+  history: () => api.get('/shifts'),
+  open: (data) => api.post('/shifts/open', data),
+  close: (data) => api.post('/shifts/close', data),
+  movement: (data) => api.post('/shifts/movement', data),
+}
+
 export const saleService = {
-  getAll: () => api.get('/sales'),
+  getAll: (params) => api.get('/sales', { params }),
   getById: (id) => api.get(`/sales/${id}`),
   create: (data) => api.post('/sales', data),
   update: (id, data) => api.put(`/sales/${id}`, data),
@@ -59,15 +88,10 @@ export const saleService = {
 
 export const reportService = {
   getDashboard: () => api.get('/reports/dashboard'),
-  // Standardized custom report method used in Reports.jsx
-  getCustomReport: (params) => api.get('/reports/profit-loss', { params }),
-  getItemSalesReport: (startDate, endDate) => 
-    api.get(`/reports/item-sales?start_date=${startDate}&end_date=${endDate}`),
-  getItemPurchaseReport: (startDate, endDate) => 
-    api.get(`/reports/item-purchases?start_date=${startDate}&end_date=${endDate}`),
-  getProfitLoss: (startDate, endDate) => 
-    api.get(`/reports/profit-loss?start_date=${startDate}&end_date=${endDate}`),
-  getStockReport: () => api.get('/reports/stock'),
+  getProfitLoss: (params) => api.get('/reports/profit-loss', { params }),
+  getItemSales: (params) => api.get('/reports/item-sales', { params }),
+  getItemPurchases: (params) => api.get('/reports/item-purchases', { params }),
+  getStock: () => api.get('/reports/stock'),
 }
 
 // Aliasing dashboardService for compatibility with Dashboard.jsx

@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Model;
 
 class Setting extends Model
 {
-    protected $fillable = ['key', 'value', 'type', 'description'];
+    use BelongsToUser;
 
-    protected $primaryKey = 'key';
-    protected $keyType = 'string';
-    public $incrementing = false;
+    // Settings are per-user, so the row id is the primary key and the
+    // "key" column is only unique within a single user's settings.
+    protected $fillable = ['key', 'value', 'type', 'description'];
 }

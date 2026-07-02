@@ -2,7 +2,8 @@ import React, { useContext } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { 
   Home, Users, Package, ShoppingCart, Settings,
-  LogOut, Menu, X, ShoppingBag, PieChart, ShieldCheck
+  LogOut, Menu, X, ShoppingBag, PieChart, ShieldCheck, UserCog, Calculator,
+  RotateCcw, Wallet, Barcode
 } from 'lucide-react'
 import { AuthContext } from '../context/AuthContext'
 import { LanguageContext } from '../App'
@@ -11,17 +12,27 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = React.useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const { logout } = useContext(AuthContext)
+  const { logout, user } = useContext(AuthContext)
   const { t } = useContext(LanguageContext)
+
+  const isMasterAdmin = user?.role === 'master_admin'
 
   const menuItems = [
     { icon: Home, label: t.dashboard, path: '/' },
+    { icon: Calculator, label: t.pos || 'POS Register', path: '/pos' },
+    { icon: RotateCcw, label: t.refunds || 'Refunds', path: '/refunds' },
+    { icon: Wallet, label: t.shift || 'Cash Drawer', path: '/shift' },
     { icon: Users, label: t.contacts, path: '/contacts' },
     { icon: Package, label: t.items, path: '/items' },
+    { icon: Barcode, label: t.labels || 'Barcode Labels', path: '/labels' },
     { icon: ShoppingCart, label: t.purchases, path: '/purchases' },
     { icon: ShoppingBag, label: t.sales, path: '/sales' },
     { icon: PieChart, label: t.reports, path: '/reports' },
     { icon: Settings, label: t.settings, path: '/settings' },
+    // Account management is reserved for the master admin.
+    ...(isMasterAdmin
+      ? [{ icon: UserCog, label: t.user_management || 'User Management', path: '/users' }]
+      : []),
   ]
 
   const handleLogout = () => {

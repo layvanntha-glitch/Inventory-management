@@ -22,7 +22,14 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'active',
     ];
+
+    /**
+     * Available roles, ordered from most to least privileged.
+     */
+    public const ROLES = ['master_admin', 'admin', 'staff'];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -44,6 +51,24 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'active' => 'boolean',
         ];
+    }
+
+    /**
+     * The master admin has unrestricted access to everything, including
+     * user/account management.
+     */
+    public function isMasterAdmin(): bool
+    {
+        return $this->role === 'master_admin';
+    }
+
+    /**
+     * Determine if the user holds one of the given roles.
+     */
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role, $roles, true);
     }
 }

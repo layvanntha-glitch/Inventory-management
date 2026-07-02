@@ -114,9 +114,8 @@ class PurchaseController extends Controller
             $purchase = Purchase::find($id);
 
             foreach ($purchase->items as $item) {
-                $itemRecord = Item::find($item->item_id);
-                $itemRecord->stock_on_hand -= $item->quantity;
-                $itemRecord->save();
+                $item->stock_on_hand -= $item->pivot->quantity;
+                $item->save();
             }
 
             $purchase->delete();

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Contact;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ContactController extends Controller
 {
@@ -31,7 +32,7 @@ class ContactController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string',
-            'email' => 'required|email|unique:contacts',
+            'email' => ['nullable', 'email', Rule::unique('contacts')->where(fn ($q) => $q->where('user_id', $request->user()->id))],
             'phone' => 'required|string',
             'address' => 'nullable|string',
             'note' => 'nullable|string',
@@ -54,7 +55,7 @@ class ContactController extends Controller
 
         $validated = $request->validate([
             'name' => 'string',
-            'email' => 'email|unique:contacts,email,' . $id,
+            'email' => ['nullable', 'email', Rule::unique('contacts')->where(fn ($q) => $q->where('user_id', $request->user()->id))->ignore($id)],
             'phone' => 'string',
             'address' => 'nullable|string',
             'note' => 'nullable|string',

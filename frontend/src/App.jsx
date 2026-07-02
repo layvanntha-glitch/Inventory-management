@@ -5,12 +5,17 @@ import Sidebar from './components/Sidebar'
 import Navbar from './components/Navbar'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import POS from './pages/POS'
 import Contacts from './pages/Contacts'
 import Items from './pages/Items'
 import Purchases from './pages/Purchases'
 import Sales from './pages/Sales'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import Users from './pages/Users'
+import Refunds from './pages/Refunds'
+import Shift from './pages/Shift'
+import Labels from './pages/Labels'
 import { AuthContext } from './context/AuthContext'
 import { ThemeContext } from './context/ThemeContext'
 import { translations } from './utils/i18n'
@@ -31,9 +36,15 @@ function App() {
     const theme = localStorage.getItem('theme') || 'light'
     
     if (token) {
-      setUser({ token })
+      let storedUser = {}
+      try {
+        storedUser = JSON.parse(localStorage.getItem('auth_user')) || {}
+      } catch (e) {
+        storedUser = {}
+      }
+      setUser({ token, ...storedUser })
     }
-    
+
     setIsDark(theme === 'dark')
     setLoading(false)
   }, [])
@@ -55,8 +66,12 @@ function App() {
 
   const logout = () => {
     localStorage.removeItem('auth_token')
+    localStorage.removeItem('auth_user')
     setUser(null)
   }
+
+  // Master admin gets the account-management screen.
+  const isMasterAdmin = user?.role === 'master_admin'
 
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>
@@ -87,12 +102,20 @@ function App() {
                       <main className="flex-1 overflow-auto">
                         <Routes>
                           <Route path="/" element={<Dashboard />} />
+                          <Route path="/pos" element={<POS />} />
+                          <Route path="/refunds" element={<Refunds />} />
+                          <Route path="/shift" element={<Shift />} />
+                          <Route path="/labels" element={<Labels />} />
                           <Route path="/contacts" element={<Contacts />} />
                           <Route path="/items" element={<Items />} />
                           <Route path="/purchases" element={<Purchases />} />
                           <Route path="/sales" element={<Sales />} />
                           <Route path="/reports" element={<Reports />} />
                           <Route path="/settings" element={<Settings />} />
+                          <Route
+                            path="/users"
+                            element={isMasterAdmin ? <Users /> : <Navigate to="/" replace />}
+                          />
                           {/* Fallback for the main area */}
                           <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>

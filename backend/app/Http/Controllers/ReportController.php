@@ -41,136 +41,209 @@ class ReportController extends Controller
             ->get();
 
         $low_stock = Item::whereRaw('stock_on_hand < reorder_level')
-            ->selectRaw('id, name, stock_on_hand as stock')
+            ->selectRaw('id, name, stock_on_hand')
             ->get();
 
         return response()->json([
-            'today' => [
-                'sales' => (float) $today_sales,
-                'purchases' => (float) $today_purchases,
-                'profit' => (float) ($today_sales - $today_purchases),
-                'stock_value' => (float) $stock_value,
-                'sales_trend' => 0, // Placeholder for trend %
-            ],
-            'month' => [
-                'sales' => (float) $month_sales,
-                'purchases' => (float) $month_purchases,
-                'profit' => (float) ($month_sales - $month_purchases),
-                'low_stock_count' => $low_stock_count,
-                'sales_trend' => 0, // Placeholder for trend %
-            ],
+            'today_sales' => (float) $today_sales,
+            'today_purchases' => (float) $today_purchases,
+            'stock_value' => (float) $stock_value,
+            'low_stock_count' => $low_stock_count,
             'sales_chart' => $sales_trend,
             'top_items' => $top_items,
             'low_stock_items' => $low_stock,
         ]);
     }
 
+    /**
+     * Resolve the [start, end] date range from the request, defaulting to the
+     * last 12 months. Dates are compared against the business sale/purchase
+     * date, not the row insert time.
+     */
+    private function resolveRange(array $validated): array
+    {
+        $start = ($validated['start_date'] ?? null)
+            ? \Carbon\Carbon::parse($validated['start_date'])->startOfDay()
+            : now()->subMonths(12)->startOfDay();
+
+        $end = ($validated['end_date'] ?? null)
+            ? \Carbon\Carbon::parse($validated['end_date'])->endOfDay()
+            : now()->endOfDay();
+
+        return [$start, $end];
+    }
+
+    /**
+     * Item Sales Report — quantity sold and revenue, aggregated per item
+     * over the selected date range.
+     */
     public function itemSales(Request $request)
     {
         $validated = $request->validate([
-            'item_id' => 'nullable|exists:items,id',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
         ]);
+        [$start, $end] = $this->resolveRange($validated);
 
-        $query = SaleItem::selectRaw('DATE(sale_items.created_at) as date, SUM(sale_items.quantity) as total_quantity, SUM(sale_items.subtotal) as total_amount, sale_items.item_id, items.name as item_name')
-            ->join('items', 'items.id', '=', 'sale_items.item_id');
+        $rows = SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('items', 'items.id', '=', 'sale_items.item_id')
+            ->whereBetween('sales.sale_date', [$start, $end])
+            ->groupBy('sale_items.item_id', 'items.name', 'items.sku')
+            ->selectRaw('sale_items.item_id, items.name as item_name, items.sku,
+                         SUM(sale_items.quantity) as total_quantity,
+                         SUM(sale_items.subtotal) as total_revenue')
+            ->orderByDesc('total_revenue')
+            ->get()
+            ->map(function ($r) {
+                $qty = (float) $r->total_quantity;
+                $rev = (float) $r->total_revenue;
+                $r->total_quantity = (int) $qty;
+                $r->total_revenue = $rev;
+                $r->avg_price = $qty > 0 ? round($rev / $qty, 2) : 0;
+                return $r;
+            });
 
-        if ($validated['item_id'] ?? null) {
-            $query->where('sale_items.item_id', $validated['item_id']);
-        }
-
-        if ($validated['start_date'] ?? null) {
-            $query->where('sale_items.created_at', '>=', $validated['start_date']);
-        }
-
-        if ($validated['end_date'] ?? null) {
-            $query->where('sale_items.created_at', '<=', $validated['end_date']);
-        }
-
-        $data = $query->groupBy('sale_items.item_id', DB::raw('DATE(sale_items.created_at)'), 'items.name')
-            ->orderBy('date')
-            ->get();
-
-        return response()->json($data);
+        return response()->json([
+            'summary' => [
+                'item_count' => $rows->count(),
+                'total_quantity' => (int) $rows->sum('total_quantity'),
+                'total_revenue' => (float) $rows->sum('total_revenue'),
+            ],
+            'rows' => $rows,
+        ]);
     }
 
+    /**
+     * Item Purchase Report — quantity bought and cost, aggregated per item
+     * over the selected date range.
+     */
     public function itemPurchases(Request $request)
     {
         $validated = $request->validate([
-            'item_id' => 'nullable|exists:items,id',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
         ]);
+        [$start, $end] = $this->resolveRange($validated);
 
-        $query = PurchaseItem::selectRaw('DATE(purchase_items.created_at) as date, SUM(purchase_items.quantity) as total_quantity, SUM(purchase_items.subtotal) as total_amount, purchase_items.item_id, items.name as item_name')
-            ->join('items', 'items.id', '=', 'purchase_items.item_id');
+        $rows = PurchaseItem::query()
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->join('items', 'items.id', '=', 'purchase_items.item_id')
+            ->whereBetween('purchases.purchase_date', [$start, $end])
+            ->groupBy('purchase_items.item_id', 'items.name', 'items.sku')
+            ->selectRaw('purchase_items.item_id, items.name as item_name, items.sku,
+                         SUM(purchase_items.quantity) as total_quantity,
+                         SUM(purchase_items.subtotal) as total_cost')
+            ->orderByDesc('total_cost')
+            ->get()
+            ->map(function ($r) {
+                $qty = (float) $r->total_quantity;
+                $cost = (float) $r->total_cost;
+                $r->total_quantity = (int) $qty;
+                $r->total_cost = $cost;
+                $r->avg_cost = $qty > 0 ? round($cost / $qty, 2) : 0;
+                return $r;
+            });
 
-        if ($validated['item_id'] ?? null) {
-            $query->where('purchase_items.item_id', $validated['item_id']);
-        }
-
-        if ($validated['start_date'] ?? null) {
-            $query->where('purchase_items.created_at', '>=', $validated['start_date']);
-        }
-
-        if ($validated['end_date'] ?? null) {
-            $query->where('purchase_items.created_at', '<=', $validated['end_date']);
-        }
-
-        $data = $query->groupBy('purchase_items.item_id', DB::raw('DATE(purchase_items.created_at)'), 'items.name')
-            ->orderBy('date')
-            ->get();
-
-        return response()->json($data);
+        return response()->json([
+            'summary' => [
+                'item_count' => $rows->count(),
+                'total_quantity' => (int) $rows->sum('total_quantity'),
+                'total_cost' => (float) $rows->sum('total_cost'),
+            ],
+            'rows' => $rows,
+        ]);
     }
 
+    /**
+     * Profit & Loss — revenue vs. cost of goods sold (COGS) using the
+     * simplified average-cost method, plus a combined line-item breakdown.
+     */
     public function profitLoss(Request $request)
     {
         $validated = $request->validate([
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
         ]);
+        [$start, $end] = $this->resolveRange($validated);
 
-        $start = $validated['start_date'] ?? now()->subMonths(12)->toDateString();
-        $end = $validated['end_date'] ?? now()->toDateString();
+        $revenue = (float) SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->whereBetween('sales.sale_date', [$start, $end])
+            ->sum('sale_items.subtotal');
 
-        $sales_revenue = Sale::whereBetween('sale_date', [$start, $end])->sum('total_amount');
-        
-        $purchase_cost = Purchase::whereBetween('purchase_date', [$start, $end])
-            ->join('purchase_items', 'purchases.id', '=', 'purchase_items.purchase_id')
+        // COGS = quantity sold × the item's average cost.
+        $cogs = (float) (SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('items', 'items.id', '=', 'sale_items.item_id')
+            ->whereBetween('sales.sale_date', [$start, $end])
+            ->selectRaw('SUM(sale_items.quantity * items.average_cost) as c')
+            ->value('c') ?? 0);
+
+        $purchaseSpend = (float) PurchaseItem::query()
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->whereBetween('purchases.purchase_date', [$start, $end])
             ->sum('purchase_items.subtotal');
 
-        $profit = $sales_revenue - $purchase_cost;
-        $margin = $sales_revenue > 0 ? ($profit / $sales_revenue) * 100 : 0;
+        $gross = $revenue - $cogs;
+        $margin = $revenue > 0 ? ($gross / $revenue) * 100 : 0;
+
+        $saleRows = SaleItem::query()
+            ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('items', 'items.id', '=', 'sale_items.item_id')
+            ->whereBetween('sales.sale_date', [$start, $end])
+            ->selectRaw("sales.sale_date as date, 'sale' as type, items.name as item_name, items.sku,
+                         sale_items.quantity, sale_items.unit_price, sale_items.subtotal as amount")
+            ->get();
+
+        $purchaseRows = PurchaseItem::query()
+            ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+            ->join('items', 'items.id', '=', 'purchase_items.item_id')
+            ->whereBetween('purchases.purchase_date', [$start, $end])
+            ->selectRaw("purchases.purchase_date as date, 'purchase' as type, items.name as item_name, items.sku,
+                         purchase_items.quantity, purchase_items.unit_price, purchase_items.subtotal as amount")
+            ->get();
+
+        $rows = $saleRows->concat($purchaseRows)->sortByDesc('date')->values();
 
         return response()->json([
-            'revenue' => $sales_revenue,
-            'cost_of_goods_sold' => $purchase_cost,
-            'profit' => $profit,
-            'profit_margin_percent' => round($margin, 2),
-            'period' => ['start' => $start, 'end' => $end],
+            'summary' => [
+                'total_revenue' => round($revenue, 2),
+                'total_cogs' => round($cogs, 2),
+                'gross_profit' => round($gross, 2),
+                'profit_margin' => round($margin, 2),
+                'total_purchases' => round($purchaseSpend, 2),
+            ],
+            'rows' => $rows,
         ]);
     }
 
+    /**
+     * Stock Report — current stock, valuation and low-stock status per item.
+     */
     public function stock()
     {
-        $items = Item::all(['id', 'name', 'sku', 'stock_on_hand', 'average_cost', 'reorder_level']);
-
-        $items->each(function ($item) {
-            $item->inventory_value = $item->stock_on_hand * $item->average_cost;
-            $item->status = $item->stock_on_hand < $item->reorder_level ? 'low' : 'ok';
+        $rows = Item::orderBy('name')->get()->map(function ($item) {
+            $value = (float) $item->stock_on_hand * (float) $item->average_cost;
+            return [
+                'id' => $item->id,
+                'name' => $item->name,
+                'sku' => $item->sku,
+                'stock_on_hand' => (int) $item->stock_on_hand,
+                'reorder_level' => (int) $item->reorder_level,
+                'average_cost' => (float) $item->average_cost,
+                'inventory_value' => round($value, 2),
+                'status' => $item->stock_on_hand < $item->reorder_level ? 'low' : 'ok',
+            ];
         });
 
-        $total_value = $items->sum('inventory_value');
-
         return response()->json([
-            'items' => $items,
-            'total_inventory_value' => $total_value,
             'summary' => [
-                'total_items' => $items->count(),
-                'low_stock_count' => $items->where('status', 'low')->count(),
+                'total_items' => $rows->count(),
+                'low_stock_count' => $rows->where('status', 'low')->count(),
+                'total_inventory_value' => round($rows->sum('inventory_value'), 2),
             ],
+            'rows' => $rows->values(),
         ]);
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Item;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ItemController extends Controller
 {
@@ -27,6 +28,11 @@ class ItemController extends Controller
             $query->whereRaw('stock_on_hand < reorder_level');
         }
 
+        // The POS register needs every product at once, not a page of 20.
+        if ($request->boolean('all')) {
+            return response()->json($query->orderBy('name')->get());
+        }
+
         return response()->json($query->paginate(20));
     }
 
@@ -35,7 +41,7 @@ class ItemController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string',
-            'sku' => 'required|string|unique:items',
+            'sku' => ['required', 'string', Rule::unique('items')->where(fn ($q) => $q->where('user_id', $request->user()->id))],
             'description' => 'nullable|string',
             'category' => 'required|string',
             'reorder_level' => 'required|integer|min:0',
@@ -66,7 +72,7 @@ class ItemController extends Controller
 
         $validated = $request->validate([
             'name' => 'string',
-            'sku' => 'string|unique:items,sku,' . $id,
+            'sku' => ['string', Rule::unique('items')->where(fn ($q) => $q->where('user_id', $request->user()->id))->ignore($id)],
             'description' => 'nullable|string',
             'category' => 'string',
             'reorder_level' => 'integer|min:0',

@@ -25,8 +25,11 @@ class SaleController extends Controller
 
         if ($request->has('search')) {
             $search = $request->search;
-            $query->whereHas('contact', function ($q) use ($search) {
-                $q->where('name', 'like', "%$search%");
+            $query->where(function ($q) use ($search) {
+                $q->where('sale_number', 'like', "%$search%")
+                  ->orWhereHas('contact', function ($c) use ($search) {
+                      $c->where('name', 'like', "%$search%");
+                  });
             });
         }
 
@@ -36,23 +39,31 @@ class SaleController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'contact_id' => 'required|exists:contacts,id',
+            'contact_id' => 'nullable|exists:contacts,id',
             'sale_date' => 'required|date',
-            'due_date' => 'required|date',
+            'due_date' => 'nullable|date',
             'items' => 'required|array|min:1',
             'items.*.item_id' => 'required|exists:items,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.unit_price' => 'required|numeric|min:0',
+            'discount' => 'nullable|numeric|min:0',
+            'tax' => 'nullable|numeric|min:0',
+            'paid_amount' => 'nullable|numeric|min:0',
+            'payment_method' => 'nullable|string',
+            'status' => 'nullable|in:pending,completed,cancelled',
+            'payment_status' => 'nullable|in:pending,unpaid,partial,paid',
             'note' => 'nullable|string',
         ]);
 
         return DB::transaction(function () use ($validated) {
-            $totalAmount = 0;
             $blockNegativeStock = Setting::where('key', 'block_negative_stock')->value('value') === 'true';
 
             // Check stock availability first
             foreach ($validated['items'] as $item) {
                 $itemRecord = Item::find($item['item_id']);
+                if (!$itemRecord) {
+                    return response()->json(['message' => 'Item not found in your inventory.'], 422);
+                }
                 if ($blockNegativeStock && $itemRecord->stock_on_hand < $item['quantity']) {
                     return response()->json([
                         'message' => 'Insufficient stock: ' . $itemRecord->name,
@@ -63,40 +74,52 @@ class SaleController extends Controller
                 }
             }
 
+            $subtotal = 0;
+            foreach ($validated['items'] as $item) {
+                $subtotal += $item['quantity'] * $item['unit_price'];
+            }
+
+            $discount = $validated['discount'] ?? 0;
+            $tax = $validated['tax'] ?? 0;
+            $total = max(0, $subtotal - $discount + $tax);
+            $paid = $validated['paid_amount'] ?? 0;
+
+            // Never record over-payment (cash tendered) as amount paid.
+            $paidRecorded = min($paid, $total);
+
+            $paymentStatus = $validated['payment_status']
+                ?? ($paidRecorded >= $total && $total > 0 ? 'paid' : ($paidRecorded > 0 ? 'partial' : 'pending'));
+
             $sale = Sale::create([
-                'sale_number' => 'SAL-' . date('YmdHis'),
-                'contact_id' => $validated['contact_id'],
+                'sale_number' => 'SAL-' . date('YmdHis') . '-' . random_int(100, 999),
+                'contact_id' => $validated['contact_id'] ?? null,
                 'sale_date' => $validated['sale_date'],
-                'due_date' => $validated['due_date'],
-                'total_amount' => 0,
-                'paid_amount' => 0,
-                'status' => 'pending',
-                'payment_status' => 'pending',
+                'due_date' => $validated['due_date'] ?? $validated['sale_date'],
+                'total_amount' => $total,
+                'discount' => $discount,
+                'tax' => $tax,
+                'paid_amount' => $paidRecorded,
+                'payment_method' => $validated['payment_method'] ?? 'cash',
+                'status' => $validated['status'] ?? 'pending',
+                'payment_status' => $paymentStatus,
                 'note' => $validated['note'] ?? null,
             ]);
 
             foreach ($validated['items'] as $item) {
-                $subtotal = $item['quantity'] * $item['unit_price'];
-                $totalAmount += $subtotal;
-
                 SaleItem::create([
                     'sale_id' => $sale->id,
                     'item_id' => $item['item_id'],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
-                    'subtotal' => $subtotal,
+                    'subtotal' => $item['quantity'] * $item['unit_price'],
                 ]);
 
-                // Update item stock
                 $itemRecord = Item::find($item['item_id']);
                 $itemRecord->stock_on_hand -= $item['quantity'];
                 $itemRecord->save();
             }
 
-            $sale->total_amount = $totalAmount;
-            $sale->save();
-
-            return response()->json($sale->load('items'), 201);
+            return response()->json($sale->load(['items', 'contact']), 201);
         });
     }
 
@@ -127,9 +150,8 @@ class SaleController extends Controller
             $sale = Sale::find($id);
 
             foreach ($sale->items as $item) {
-                $itemRecord = Item::find($item->item_id);
-                $itemRecord->stock_on_hand += $item->quantity;
-                $itemRecord->save();
+                $item->stock_on_hand += $item->pivot->quantity;
+                $item->save();
             }
 
             $sale->delete();

@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Model;
 
 class Item extends Model
 {
+    use BelongsToUser;
+
     protected $fillable = ['name', 'sku', 'description', 'category', 'stock_on_hand', 'reorder_level', 'average_cost', 'cost_price', 'sell_price'];
 
     protected $casts = [

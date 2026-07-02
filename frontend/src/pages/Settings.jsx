@@ -11,16 +11,36 @@ import {
   Bell,
   CheckCircle2
 } from 'lucide-react'
-import { settingsService } from '../services/api'
+import { settingsService, authService } from '../services/api'
 import { LanguageContext } from '../App'
+import { AuthContext } from '../context/AuthContext'
 import toast from 'react-hot-toast'
+
+const ROLE_LABELS = {
+  master_admin: 'Master Admin',
+  admin: 'Admin',
+  staff: 'Staff',
+}
 
 export default function Settings() {
   const { language, setLanguage, t } = useContext(LanguageContext)
+  const { user, setUser } = useContext(AuthContext)
   const [activeTab, setActiveTab] = useState('general')
   const [loading, setLoading] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [confirmText, setConfirmText] = useState('')
+
+  // Logged-in user's own profile (Account tab)
+  const [profile, setProfile] = useState({ name: '', email: '' })
+  const [savingProfile, setSavingProfile] = useState(false)
+
+  // Password change (Security tab)
+  const [passwords, setPasswords] = useState({
+    current_password: '',
+    password: '',
+    password_confirmation: '',
+  })
+  const [savingPassword, setSavingPassword] = useState(false)
   
   const [settings, setSettings] = useState({
     business_name: 'Sale Prom Inventory',
@@ -29,12 +49,63 @@ export default function Settings() {
     email_notifications: true,
     low_stock_threshold: 5,
     language: language,
-    theme: 'light'
+    theme: 'light',
+    receipt_header: '',
+    receipt_footer: '',
   })
 
   useEffect(() => {
     fetchSettings()
+    fetchProfile()
   }, [])
+
+  const fetchProfile = async () => {
+    try {
+      const response = await authService.me()
+      setProfile({ name: response.data.name || '', email: response.data.email || '' })
+      // Keep the cached user (role, name, email) fresh.
+      const merged = { ...user, ...response.data }
+      setUser(merged)
+      localStorage.setItem('auth_user', JSON.stringify(response.data))
+    } catch (error) {
+      // Fall back to whatever is already in context.
+      setProfile({ name: user?.name || '', email: user?.email || '' })
+    }
+  }
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault()
+    try {
+      setSavingProfile(true)
+      const response = await authService.updateProfile(profile)
+      const merged = { ...user, ...response.data }
+      setUser(merged)
+      localStorage.setItem('auth_user', JSON.stringify(response.data))
+      toast.success(t.settings_success || 'Profile updated successfully')
+    } catch (error) {
+      toast.error(error.response?.data?.message || t.failed_update || 'Update failed')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    if (passwords.password !== passwords.password_confirmation) {
+      toast.error('New passwords do not match')
+      return
+    }
+    try {
+      setSavingPassword(true)
+      await authService.updateProfile(passwords)
+      toast.success('Password changed successfully')
+      setPasswords({ current_password: '', password: '', password_confirmation: '' })
+    } catch (error) {
+      toast.error(error.response?.data?.message || t.failed_update || 'Update failed')
+    } finally {
+      setSavingPassword(false)
+    }
+  }
 
   const fetchSettings = async () => {
     try {
@@ -190,6 +261,18 @@ export default function Settings() {
                       <span className="text-slate-700 dark:text-gray-300 font-semibold text-xs uppercase tracking-widest">{t.email_notifications}</span>
                     </label>
                   </div>
+
+                  <div className="pt-6 border-t border-slate-50 dark:border-gray-800 space-y-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">POS Receipt</h4>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Receipt Header</label>
+                      <textarea name="receipt_header" value={settings.receipt_header} onChange={handleChange} rows="2" className="input-field" placeholder="e.g. address, phone, tax ID" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Receipt Footer</label>
+                      <textarea name="receipt_footer" value={settings.receipt_footer} onChange={handleChange} rows="2" className="input-field" placeholder="e.g. Thank you! Returns within 7 days." />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -201,22 +284,48 @@ export default function Settings() {
                   </h3>
                   
                   <div className="flex items-center gap-4 p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl border border-slate-100 dark:border-gray-800">
-                    <div className="w-12 h-12 rounded-lg bg-sky-600 flex items-center justify-center text-white text-xl font-bold">A</div>
+                    <div className="w-12 h-12 rounded-lg bg-sky-600 flex items-center justify-center text-white text-xl font-bold">
+                      {(profile.name || user?.name || '?').charAt(0).toUpperCase()}
+                    </div>
                     <div>
-                      <h4 className="font-bold text-slate-900 dark:text-white">Administrator</h4>
-                      <p className="text-xs text-slate-400 font-medium tracking-wider">PRIMARY ACCOUNT</p>
+                      <h4 className="font-bold text-slate-900 dark:text-white">{profile.name || user?.name || '—'}</h4>
+                      <p className="text-xs text-slate-400 font-medium tracking-wider uppercase">
+                        {ROLE_LABELS[user?.role] || 'Account'}
+                      </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">{t.full_name}</label>
-                      <input type="text" className="input-field" defaultValue="Administrator" />
+                      <input
+                        type="text"
+                        className="input-field"
+                        value={profile.name}
+                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">{t.email}</label>
-                      <input type="email" className="input-field" defaultValue="admin@example.com" />
+                      <input
+                        type="email"
+                        className="input-field"
+                        value={profile.email}
+                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                      />
                     </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveProfile}
+                      disabled={savingProfile}
+                      className="btn-primary min-w-[200px] !py-4 flex items-center justify-center gap-3 text-lg"
+                    >
+                      {savingProfile ? <RefreshCcw className="animate-spin" size={20} /> : <Save size={20} />}
+                      <span>{t.save_changes}</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -231,16 +340,46 @@ export default function Settings() {
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">{t.current_password}</label>
-                      <input type="password" placeholder="••••••••" className="input-field" />
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        className="input-field"
+                        value={passwords.current_password}
+                        onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">{t.new_password}</label>
-                      <input type="password" placeholder="••••••••" className="input-field" />
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        className="input-field"
+                        value={passwords.password}
+                        onChange={(e) => setPasswords({ ...passwords, password: e.target.value })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">{t.confirm_new_password}</label>
-                      <input type="password" placeholder="••••••••" className="input-field" />
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        className="input-field"
+                        value={passwords.password_confirmation}
+                        onChange={(e) => setPasswords({ ...passwords, password_confirmation: e.target.value })}
+                      />
                     </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={handleChangePassword}
+                      disabled={savingPassword || !passwords.current_password || !passwords.password}
+                      className="btn-primary min-w-[200px] !py-4 flex items-center justify-center gap-3 text-lg disabled:opacity-50"
+                    >
+                      {savingPassword ? <RefreshCcw className="animate-spin" size={20} /> : <Shield size={20} />}
+                      <span>{t.save_changes}</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -293,7 +432,7 @@ export default function Settings() {
               )}
             </div>
 
-            {activeTab !== 'system' && activeTab !== 'security' && (
+            {activeTab === 'general' && (
               <div className="flex justify-end pt-4">
                 <button type="submit" disabled={loading} className="btn-primary min-w-[200px] !py-4 flex items-center justify-center gap-3 text-lg" >
                   {loading ? <RefreshCcw className="animate-spin" size={20} /> : <Save size={20} />}

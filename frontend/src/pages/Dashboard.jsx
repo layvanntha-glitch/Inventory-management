@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react'
 import { TrendingUp, ShoppingBag, ShoppingCart, DollarSign, Package, ArrowRight, AlertCircle } from 'lucide-react'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import { dashboardService } from '../services/api'
 import { LanguageContext } from '../App'
 import { Link } from 'react-router-dom'
@@ -103,8 +104,65 @@ export default function Dashboard() {
             <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest">{t.sales_trend}</h3>
             <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase">Realtime Data</span>
           </div>
-          <div className="h-[200px] flex items-center justify-center border-2 border-dashed border-slate-100 dark:border-gray-800 rounded-xl text-slate-300 font-medium">
-             (Sales Chart Visualization coming soon in Simple mode)
+          <div className="h-[200px] w-full">
+            {stats?.sales_chart && stats.sales_chart.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={stats.sales_chart}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis 
+                    dataKey="date" 
+                    tickFormatter={(tick) => {
+                      try {
+                        const parts = tick.split('-')
+                        return `${parts[1]}/${parts[2]}` // MM/DD
+                      } catch {
+                        return tick
+                      }
+                    }}
+                    tickLine={false}
+                    axisLine={false}
+                    className="text-[10px] fill-slate-400 font-semibold"
+                  />
+                  <YAxis 
+                    tickLine={false}
+                    axisLine={false}
+                    className="text-[10px] fill-slate-400 font-semibold"
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      color: '#0f172a'
+                    }}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="amount" 
+                    name="Sales" 
+                    stroke="#0ea5e9" 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorSales)" 
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center border border-dashed border-slate-100 dark:border-gray-800 rounded-xl text-slate-400 text-xs font-semibold">
+                No recent sales transactions found to display trend
+              </div>
+            )}
           </div>
         </div>
 

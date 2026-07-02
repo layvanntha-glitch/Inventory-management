@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Model;
 
 class Contact extends Model
 {
+    use BelongsToUser;
+
     protected $fillable = ['name', 'email', 'phone', 'address', 'note', 'type', 'active'];
 
     public function purchases()

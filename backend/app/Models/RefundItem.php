@@ -5,11 +5,11 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToUser;
 use Illuminate\Database\Eloquent\Model;
 
-class PurchaseItem extends Model
+class RefundItem extends Model
 {
     use BelongsToUser;
 
-    protected $fillable = ['purchase_id', 'item_id', 'quantity', 'unit_price', 'subtotal'];
+    protected $fillable = ['refund_id', 'item_id', 'quantity', 'unit_price', 'subtotal'];
 
     protected $casts = [
         'quantity' => 'integer',
@@ -17,9 +17,9 @@ class PurchaseItem extends Model
         'subtotal' => 'decimal:2',
     ];
 
-    public function purchase()
+    public function refund()
     {
-        return $this->belongsTo(Purchase::class);
+        return $this->belongsTo(Refund::class);
     }
 
     public function item()

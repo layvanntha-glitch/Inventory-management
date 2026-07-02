@@ -235,7 +235,6 @@ export default function Contacts() {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="input-field"
-                required
               />
             </div>
             <div className="space-y-2">
