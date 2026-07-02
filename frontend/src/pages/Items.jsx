@@ -23,10 +23,32 @@ export default function Items() {
     reorder_level: '',
   }
   const [formData, setFormData] = useState(initialFormData)
+  const [autoSku, setAutoSku] = useState(true)
 
   useEffect(() => {
     fetchItems()
   }, [])
+
+  const fetchNextSku = async () => {
+    try {
+      const res = await itemService.nextSku()
+      setFormData((prev) => ({ ...prev, sku: res.data.sku }))
+    } catch { /* fall back to manual entry */ }
+  }
+
+  const openCreate = () => {
+    setEditingId(null)
+    setFormData(initialFormData)
+    setShowModal(true)
+    if (autoSku) fetchNextSku()
+  }
+
+  const toggleAutoSku = () => {
+    const next = !autoSku
+    setAutoSku(next)
+    if (next) fetchNextSku()
+    else setFormData((prev) => ({ ...prev, sku: '' }))
+  }
 
   const fetchItems = async () => {
     setLoading(true)
@@ -94,11 +116,7 @@ export default function Items() {
           <p className="text-sm text-slate-500 mt-1">Manage and track your products and inventory levels.</p>
         </div>
         <button
-          onClick={() => {
-            setEditingId(null)
-            setFormData(initialFormData)
-            setShowModal(true)
-          }}
+          onClick={openCreate}
           className="btn-primary flex items-center space-x-2"
         >
           <Plus size={20} />
@@ -219,12 +237,26 @@ export default function Items() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">{t.sku}</label>
+              <div className="flex items-center justify-between pl-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.sku}</label>
+                {!editingId && (
+                  <button
+                    type="button"
+                    onClick={toggleAutoSku}
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md border transition-all ${autoSku ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-slate-100 dark:bg-gray-800 text-slate-500 border-slate-200 dark:border-gray-700'}`}
+                    title="Toggle automatic SKU"
+                  >
+                    {autoSku ? '⚡ Auto' : '✎ Manual'}
+                  </button>
+                )}
+              </div>
               <input
                 type="text"
                 value={formData.sku}
                 onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                className="input-field !py-4 font-mono text-lg font-semibold"
+                readOnly={autoSku && !editingId}
+                placeholder="Item-000"
+                className={`input-field !py-4 font-mono text-lg font-semibold ${autoSku && !editingId ? 'bg-slate-50 dark:bg-gray-800 text-slate-500 cursor-not-allowed' : ''}`}
                 required
               />
             </div>

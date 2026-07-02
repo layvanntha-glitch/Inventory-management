@@ -36,6 +36,26 @@ class ItemController extends Controller
         return response()->json($query->paginate(20));
     }
 
+    /**
+     * Suggest the next auto SKU for this user: Item-000, Item-001, ...
+     * Based on the highest existing "Item-<number>" SKU in their inventory.
+     */
+    public function nextSku()
+    {
+        $prefix = 'Item-';
+        $max = -1;
+
+        foreach (Item::where('sku', 'like', $prefix . '%')->pluck('sku') as $sku) {
+            if (preg_match('/^Item-(\d+)$/', $sku, $m)) {
+                $max = max($max, (int) $m[1]);
+            }
+        }
+
+        $sku = $prefix . str_pad((string) ($max + 1), 3, '0', STR_PAD_LEFT);
+
+        return response()->json(['sku' => $sku]);
+    }
+
     public function store(Request $request)
     {
 

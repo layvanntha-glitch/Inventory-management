@@ -45,6 +45,7 @@ export const contactService = {
 export const itemService = {
   getAll: () => api.get('/items'),
   getAllProducts: () => api.get('/items?all=1'),
+  nextSku: () => api.get('/items/next-sku'),
   getById: (id) => api.get(`/items/${id}`),
   create: (data) => api.post('/items', data),
   update: (id, data) => api.put(`/items/${id}`, data),

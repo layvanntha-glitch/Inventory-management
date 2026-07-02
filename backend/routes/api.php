@@ -45,6 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Items
     Route::get('/items', [ItemController::class, 'index']);
+    Route::get('/items/next-sku', [ItemController::class, 'nextSku']);
     Route::post('/items', [ItemController::class, 'store']);
     Route::get('/items/{id}', [ItemController::class, 'show']);
     Route::put('/items/{id}', [ItemController::class, 'update']);
